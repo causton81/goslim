@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"github.com/causton81/goslim/lib"
 	"io"
 	"log"
 	"os"
@@ -22,10 +23,10 @@ func redirectStdoutAndStderr() {
 	//slimOut = os.Stdout
 
 	stdoutReadSide, stdoutWriteSide, err := os.Pipe()
-	Must(err)
+	lib.Must(err)
 
 	stderrReadSide, stderrWriteSide, err := os.Pipe()
-	Must(err)
+	lib.Must(err)
 
 	psOut := newPrefixedStream(realStderr, "SOUT")
 	psErr := newPrefixedStream(realStderr, "SERR")
@@ -44,7 +45,7 @@ func redirectStdoutAndStderr() {
 			} else if 0 < n {
 				if 0 < unix.POLLIN&fds[0].Revents {
 					numRead, err := stdoutReadSide.Read(buf)
-					Must(err)
+					lib.Must(err)
 					data := buf[0:numRead]
 					psOut.write(data)
 					//final := bytes.ReplaceAll(data, newline, stdoutStart)
@@ -52,7 +53,7 @@ func redirectStdoutAndStderr() {
 				}
 				if 0 < unix.POLLIN&fds[1].Revents {
 					numRead, err := stderrReadSide.Read(buf)
-					Must(err)
+					lib.Must(err)
 					data := buf[0:numRead]
 					psErr.write(data)
 					//final := bytes.ReplaceAll(data, newline, stdoutStart)
@@ -64,12 +65,6 @@ func redirectStdoutAndStderr() {
 
 	os.Stdout = stdoutWriteSide
 	os.Stderr = stderrWriteSide
-}
-
-func Must(err error) {
-	if err != nil {
-		panic(err)
-	}
 }
 
 func RegisterFixture(fix interface{}) {
@@ -165,7 +160,7 @@ func loadSlim(r io.Reader) slimmer {
 		return slimString("")
 	} else {
 		peekBytes, err := buf.Peek(1)
-		Must(err)
+		lib.Must(err)
 
 		isList := '[' == peekBytes[0]
 		if isList {
@@ -176,7 +171,7 @@ func loadSlim(r io.Reader) slimmer {
 			for i := range l {
 				l[i] = loadSlim(buf)
 				nextByte, err := buf.ReadByte()
-				Must(err)
+				lib.Must(err)
 
 				if ':' != nextByte {
 					log.Fatalf("expected next byte to be :")
@@ -184,7 +179,7 @@ func loadSlim(r io.Reader) slimmer {
 			}
 
 			nextByte, err := buf.ReadByte()
-			Must(err)
+			lib.Must(err)
 			if ']' != nextByte {
 				log.Fatalf("expected next byte to be ]")
 			}
@@ -194,7 +189,7 @@ func loadSlim(r io.Reader) slimmer {
 			bld := new(strings.Builder)
 			bld.Grow(length)
 			_, err := io.CopyN(bld, buf, int64(length))
-			Must(err)
+			lib.Must(err)
 
 			return slimString(bld.String())
 		}
@@ -203,9 +198,9 @@ func loadSlim(r io.Reader) slimmer {
 
 func parseLength(buf *bufio.Reader) int {
 	sizeField, err := buf.ReadString(':')
-	Must(err)
+	lib.Must(err)
 	size, err := strconv.ParseInt(sizeField[0:len(sizeField)-1], 10, 0)
-	Must(err)
+	lib.Must(err)
 	return int(size)
 }
 
