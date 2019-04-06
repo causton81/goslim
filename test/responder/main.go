@@ -1,6 +1,9 @@
 package main
 
-import "github.com/causton81/goslim/slim"
+import (
+	"fmt"
+	"github.com/causton81/goslim/slim"
+)
 
 type DummyDecisionTable struct {
 }
@@ -11,10 +14,18 @@ type TestSlim struct {
 }
 
 func (*TestSlim) ThrowNormal() string {
-	return "first"
+	panic(fmt.Errorf("first"))
 }
 func (*TestSlim) ThrowStopping() string {
-	return "second"
+	panic(StopTest{msg: "second"})
+}
+
+type StopTest struct {
+	msg string
+}
+
+func (st StopTest) Error() string {
+	return st.msg
 }
 
 func main() {
