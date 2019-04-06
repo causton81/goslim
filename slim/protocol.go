@@ -78,33 +78,165 @@ func RegisterFixtureWithName(fix interface{}, scriptAlias string) {
 	fixtureTypes[scriptAlias] = reflect.TypeOf(fix)
 }
 
+var instances = make(map[string]reflect.Value)
+
 func ListenAndServe() {
 	slimIn = os.Stdin
 	slimOut = os.Stdout
 	redirectStdoutAndStderr()
 
 	slimOut.WriteString("Slim -- V0.5\n")
-	instructions := loadSlim(slimIn)
-	slimResults := slimList{}
-	log.Println("Slim Instructions:")
-	for _, inst := range instructions.(slimList) {
-		log.Println(inst)
-		inst := inst.(slimList)
-		id := inst[0].String()
-		op := inst[1].String()
 
-		switch op {
-		case "make":
-			//instanceName := inst[2].String()
-			className := inst[3].String()
-			//typ, found := fixtureTypes[className]
-			slimResults = append(slimResults, asList(id, fmt.Sprintf("__EXCEPTION__:message:<<NO_CLASS %s>>", className)))
-		default:
-			slimResults = append(slimResults, asList(id, fmt.Sprintf("__EXCEPTION__:message:<<MALFORMED_INSTRUCTION %s>>", op)))
+	running := true
+
+	for running {
+		slimmer := loadSlim(slimIn)
+
+		if s, ok := slimmer.(slimString); ok {
+			if "bye" == s {
+				running = false
+				break
+			}
+
+			log.Fatalf("unexpected string from fitnessse: '%s'", s)
 		}
+		instructions := slimmer.(slimList)
+		slimResults := make(slimList, len(instructions))
+		log.Println("Slim Instructions:")
+		for idx, inst := range instructions {
+			log.Println(inst)
+			inst := inst.(slimList)
+			id := inst[0].String()
+			op := inst[1].String()
+
+			switch op {
+			case "make":
+				instanceName := inst[2].String()
+				className := inst[3].String()
+				typ, found := fixtureTypes[className]
+				if !found {
+					slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:message:<<NO_CLASS %s>>", className))
+				} else {
+					instances[instanceName] = reflect.New(typ)
+					slimResults[idx] = asList(id, "OK")
+				}
+
+			// [decisionTable_0_1 call decisionTable_0 table [[numerator denominator quotient?] [10 2 5.0] [12.6 3 4.2] [22 7 ~=3.14] [9 3 <5] [11 2 4<_<6] [100 4 33]]]
+			case "call":
+				returnString := "/__VOID__/"
+				instanceName := inst[2].String()
+				methodName := strings.Title(inst[3].String())
+				instance, found := instances[instanceName]
+				numFields := len(inst)
+				var args slimList
+				hasArguments := 4 < numFields
+				if hasArguments {
+					args = inst[4:numFields]
+				}
+				if !found {
+					slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:message:<<NO_INSTANCE %s>>", instanceName))
+				} else {
+					m := instance.MethodByName(methodName)
+					if !m.IsValid() {
+						slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:message:<<NO_METHOD_IN_CLASS %s %s>>", methodName, instance.Type()))
+					} else if m.Type().NumIn() != len(args) {
+						slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:message:<<%s expects exactly %d arguments, but received %d>>", methodName, m.Type().NumIn(), len(args)))
+					} else {
+						//slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:TODO"))
+						convertedValues := convertArguments(m.Type(), args)
+						res := m.Call(convertedValues)
+						switch len(res) {
+						case 0:
+							// empty
+						case 1:
+							c := converters[res[0].Type()]
+							returnString = c.Out(res[0])
+						default:
+							returnString = "__EXCEPTION__:multi-value return is not supported"
+						}
+
+						slimResults[idx] = asList(id, returnString)
+					}
+				}
+			default:
+				slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:message:<<MALFORMED_INSTRUCTION %s>>", op))
+			}
+		}
+
+		fmt.Fprintf(slimOut, "%s", slimResults.Slim())
+	}
+}
+
+//type converter func(s slimString) reflect.Value
+type Converter interface {
+	Type() reflect.Type
+	In(s string) reflect.Value
+	Out(value reflect.Value) string
+}
+
+var converters = make(map[reflect.Type]Converter)
+
+type float64conv struct{}
+
+func (float64conv) Type() reflect.Type {
+	return reflect.TypeOf(float64(0))
+}
+
+func (float64conv) Out(value reflect.Value) string {
+	//return strconv.FormatFloat(value.Float(), 'f', 1, 64)
+	rval := fmt.Sprintf("%g", value.Float())
+	if !strings.Contains(rval, ".") {
+		rval += ".0"
 	}
 
-	fmt.Fprintf(slimOut, "%s", slimResults.Slim())
+	return rval
+}
+
+func (float64conv) In(s string) reflect.Value {
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		panic(err)
+	}
+
+	return reflect.ValueOf(v)
+}
+
+func RegisterConverter(c Converter) {
+	converters[c.Type()] = c
+}
+
+type stringConv struct{}
+
+func (stringConv) Type() reflect.Type {
+	return reflect.TypeOf(string(""))
+}
+
+func (stringConv) In(s string) reflect.Value {
+	return reflect.ValueOf(s)
+}
+
+func (stringConv) Out(value reflect.Value) string {
+	return value.Interface().(string)
+}
+
+func init() {
+	RegisterConverter(stringConv{})
+	RegisterConverter(float64conv{})
+}
+
+func convertArguments(funcTyp reflect.Type, args slimList) []reflect.Value {
+	ret := make([]reflect.Value, funcTyp.NumIn())
+	for i := 0; i < funcTyp.NumIn(); i++ {
+		argTyp := funcTyp.In(i)
+		log.Printf("arg typ %s", argTyp)
+		conv, found := converters[argTyp]
+		if !found {
+			panic("no converter")
+		}
+		ret[i] = conv.In(args[i].(slimString).String())
+	}
+
+	return ret
 }
 
 type slimmer interface {
