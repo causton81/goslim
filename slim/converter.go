@@ -58,6 +58,16 @@ func (stringConv) Out(value reflect.Value) string {
 	return value.Interface().(string)
 }
 
+type Scoper interface {
+	GetPrefix() string
+}
+
+var typePrefix = ""
+
+func SetTypePrefix(p string) {
+	typePrefix = p
+}
+
 func convertArguments(funcTyp reflect.Type, args slimList) []reflect.Value {
 	ret := make([]reflect.Value, funcTyp.NumIn())
 	for i := 0; i < funcTyp.NumIn(); i++ {
@@ -65,7 +75,10 @@ func convertArguments(funcTyp reflect.Type, args slimList) []reflect.Value {
 		log.Printf("arg typ %s", argTyp)
 		conv, found := converters[argTyp]
 		if !found {
-			panic("no converter")
+			//if argTyp.Implements(reflect.TypeOf((*Scoper)(nil))) {
+			//	typePrefix = reflect.New(argTyp).Interface().(Scoper).GetPrefix()
+			//}
+			panic(fmt.Errorf("message:<<NO_CONVERTER_FOR_ARGUMENT_NUMBER %s%s.>>", typePrefix, argTyp.Name()))
 		}
 		ret[i] = conv.In(args[i].(slimString).String())
 	}
