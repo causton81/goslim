@@ -71,6 +71,35 @@ func (float64conv) In(s string) reflect.Value {
 	return reflect.ValueOf(v)
 }
 
+type sliceIntConv struct {
+}
+
+func (sliceIntConv) Type() reflect.Type {
+	return reflect.TypeOf([]int{})
+}
+
+func (sliceIntConv) In(s string) reflect.Value {
+	parts := strings.Split(s, ",")
+	rval := make([]int, len(parts))
+	for i, e := range parts {
+		var err error
+		rval[i], err = strconv.Atoi(e)
+		lib.Must(err)
+	}
+
+	return reflect.ValueOf(rval)
+}
+
+func (sliceIntConv) Out(value reflect.Value) string {
+	numbers := value.Interface().([]int)
+	strs := make([]string, len(numbers))
+	for i, elem := range numbers {
+		strs[i] = strconv.Itoa(elem)
+	}
+	return fmt.Sprintf("[%s]", strings.Join(strs, ", "))
+	//return fmt.Sprintf("%v", numbers)
+}
+
 func RegisterConverter(c Converter) {
 	converters[c.Type()] = c
 }

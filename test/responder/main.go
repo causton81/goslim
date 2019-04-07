@@ -11,7 +11,12 @@ type DummyDecisionTable struct {
 func (*DummyDecisionTable) X() {}
 
 type TestSlim struct {
-	s string
+	s    string
+	list []int
+}
+
+func (*TestSlim) Init() {
+
 }
 
 type NoSuchConverter struct {
@@ -73,6 +78,14 @@ func (*TestSlim) ThrowExceptionWithMessage() {
 	panic("Test message")
 }
 
+func (ts *TestSlim) OneList(in []int) {
+	ts.list = in
+}
+
+func (ts *TestSlim) GetListArg() []int {
+	return ts.list
+}
+
 type ExecuteThrowsReportableException struct {
 }
 
@@ -97,6 +110,17 @@ func (*DummyDecisionTableWithExecuteButNoReset) X() int {
 	return 1
 }
 
+type DecisionTableExecuteThrows struct {
+}
+
+func (*DecisionTableExecuteThrows) Execute() {
+	panic("EXECUTE_THROWS")
+}
+
+func (*DecisionTableExecuteThrows) X() int {
+	return 1
+}
+
 func main() {
 	slim.SetTypePrefix("fitnesse.slim.test.TestSlim$")
 	slim.RegisterFixtureWithName(DummyDecisionTable{}, "fitnesse.slim.test.DummyDecisionTable")
@@ -104,5 +128,6 @@ func main() {
 	slim.RegisterFixtureWithName(ExecuteThrowsReportableException{}, "fitnesse.slim.test.ExecuteThrowsReportableException")
 	slim.RegisterFixtureWithName(TableFixture{}, "TableFixture")
 	slim.RegisterFixtureWithName(DummyDecisionTableWithExecuteButNoReset{}, "fitnesse.slim.test.DummyDecisionTableWithExecuteButNoReset")
+	slim.RegisterFixtureWithName(DecisionTableExecuteThrows{}, "fitnesse.slim.test.DecisionTableExecuteThrows")
 	slim.ListenAndServe()
 }

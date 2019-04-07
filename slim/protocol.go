@@ -120,6 +120,8 @@ runLoop:
 
 var instanceTypes = make(map[string]string)
 
+var symbols = make(map[string]interface{})
+
 func processInstruction(inst slimList, slimResults slimList, idx int) (stop bool) {
 	log.Println(inst)
 	id := inst[0].String()
@@ -164,19 +166,19 @@ func processInstruction(inst slimList, slimResults slimList, idx int) (stop bool
 		className := inst[3].String()
 		var args slimList
 		if 4 < len(inst) {
-			args = inst[4:len(inst)]
+			args = inst[4:]
 		}
 		numArgs := len(args)
 
 		typ, found := fixtureTypes[className]
 		if !found {
-			//slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:message:<<COULD_NOT_INVOKE_CONSTRUCTOR %s>>", className))
 			panic(fmt.Errorf("message:<<COULD_NOT_INVOKE_CONSTRUCTOR %s>>", className))
 		} else {
 			initMethod, hasInit := reflect.PtrTo(typ).MethodByName("Init")
-			//log.Printf("%s hasInit %v", typ.Name(), hasInit)
+			log.Printf("has init %v, args %v", hasInit, args)
 			if hasInit {
-				if numArgs != initMethod.Type.NumIn() {
+				numArgsWithReceiver := 1 + numArgs
+				if numArgsWithReceiver != initMethod.Type.NumIn() {
 					panic(fmt.Errorf("message:<<COULD_NOT_INVOKE_CONSTRUCTOR %s[%d]>>", className, numArgs))
 				}
 			}
@@ -187,17 +189,23 @@ func processInstruction(inst slimList, slimResults slimList, idx int) (stop bool
 		}
 
 	// [decisionTable_0_1 call decisionTable_0 table [[numerator denominator quotient?] [10 2 5.0] [12.6 3 4.2] [22 7 ~=3.14] [9 3 <5] [11 2 4<_<6] [100 4 33]]]
-	case "call":
+	case "call", "callAndAssign":
 		returnString := "/__VOID__/"
-		instanceName := inst[2].String()
-		slimMethodName := inst[3].String()
+		off := 0
+		symbolName := ""
+		if "callAndAssign" == op {
+			symbolName = inst[2].String()
+			off = 1
+		}
+		instanceName := inst[2+off].String()
+		slimMethodName := inst[3+off].String()
 		goMethodName := strings.Title(slimMethodName)
 		instance, found := instances[instanceName]
 		numFields := len(inst)
 		var args slimList
-		hasArguments := 4 < numFields
+		hasArguments := (4 + off) < numFields
 		if hasArguments {
-			args = inst[4:numFields]
+			args = inst[4+off : numFields]
 		}
 		if !found {
 			slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:message:<<NO_INSTANCE %s>>", instanceName))
@@ -205,7 +213,7 @@ func processInstruction(inst slimList, slimResults slimList, idx int) (stop bool
 			m := instance.MethodByName(goMethodName)
 			slimArgCount := len(args)
 			if !m.IsValid() {
-				slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:message:<<NO_METHOD_IN_CLASS %s[%d] %s>>", slimMethodName, slimArgCount, instanceTypes[instanceName]))
+				slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:message:<<NO_METHOD_IN_CLASS %s[%d] %s.>>", slimMethodName, slimArgCount, instanceTypes[instanceName]))
 			} else if m.Type().NumIn() != slimArgCount {
 				slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:message:<<%s expects exactly %d arguments, but received %d>>", goMethodName, m.Type().NumIn(), slimArgCount))
 			} else {
@@ -216,6 +224,9 @@ func processInstruction(inst slimList, slimResults slimList, idx int) (stop bool
 					// empty
 				case 1:
 					v := res[0]
+					if "callAndAssign" == op {
+						symbols[symbolName] = v.Interface()
+					}
 					if reflect.Ptr == v.Kind() && v.IsNil() {
 						returnString = "null"
 					} else {
@@ -229,6 +240,8 @@ func processInstruction(inst slimList, slimResults slimList, idx int) (stop bool
 				slimResults[idx] = asList(id, returnString)
 			}
 		}
+	//case "callAndAssign":
+
 	default:
 		slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:message:<<MALFORMED_INSTRUCTION %s>>", op))
 	}
@@ -240,6 +253,7 @@ func init() {
 	RegisterConverter(stringConv{})
 	RegisterConverter(intConv{})
 	RegisterConverter(float64conv{})
+	RegisterConverter(sliceIntConv{})
 }
 
 type slimmer interface {
