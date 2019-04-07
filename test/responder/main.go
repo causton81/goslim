@@ -11,6 +11,7 @@ type DummyDecisionTable struct {
 func (*DummyDecisionTable) X() {}
 
 type TestSlim struct {
+	s string
 }
 
 type NoSuchConverter struct {
@@ -35,9 +36,35 @@ func (st StopTest) Error() string {
 	return st.msg
 }
 
+
+func (*TestSlim) NullString() *string {
+	return nil
+}
+
+func (*TestSlim) ReturnString() string {
+	return "string"
+}
+
+func (ts *TestSlim) SetString(in string) {
+	ts.s = in
+}
+
+func (ts *TestSlim) GetStringArg() string {
+	return ts.s
+}
+
+type ExecuteThrowsReportableException struct {
+
+}
+
+func (*ExecuteThrowsReportableException) Execute() {
+	panic(fmt.Errorf("A Reportable Exception"))
+}
+
 func main() {
 	slim.SetTypePrefix("fitnesse.slim.test.TestSlim$")
 	slim.RegisterFixtureWithName(DummyDecisionTable{}, "fitnesse.slim.test.DummyDecisionTable")
 	slim.RegisterFixtureWithName(TestSlim{}, "fitnesse.slim.test.TestSlim")
+	slim.RegisterFixtureWithName(ExecuteThrowsReportableException{}, "fitnesse.slim.test.ExecuteThrowsReportableException")
 	slim.ListenAndServe()
 }

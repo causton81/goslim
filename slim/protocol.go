@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"reflect"
+	"runtime/debug"
 	"strconv"
 	"strings"
 
@@ -105,7 +106,7 @@ runLoop:
 			log.Println("Slim Instructions:")
 			for idx, inst := range s {
 				if processInstruction(inst.(slimList), slimResults, idx) {
-					slimResults = slimResults[0:idx+1]
+					slimResults = slimResults[0 : idx+1]
 					break
 				}
 			}
@@ -114,6 +115,8 @@ runLoop:
 		}
 	}
 }
+
+var instanceTypes = make(map[string]string)
 
 func processInstruction(inst slimList, slimResults slimList, idx int) (stop bool) {
 	log.Println(inst)
@@ -126,7 +129,7 @@ func processInstruction(inst slimList, slimResults slimList, idx int) (stop bool
 				slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:ABORT_SLIM_TEST:%s", err))
 				stop = true
 			} else {
-				slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:%s", err))
+				slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:%s %s", err, debug.Stack()))
 			}
 		}
 	}()
@@ -138,9 +141,11 @@ func processInstruction(inst slimList, slimResults slimList, idx int) (stop bool
 		className := inst[3].String()
 		typ, found := fixtureTypes[className]
 		if !found {
-			slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:message:<<NO_CLASS %s>>", className))
+			slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:message:<<COULD_NOT_INVOKE_CONSTRUCTOR %s>>", className))
 		} else {
 			instances[instanceName] = reflect.New(typ)
+			//TODO: maybe make this better
+			instanceTypes[instanceName] = className
 			slimResults[idx] = asList(id, "OK")
 		}
 
@@ -148,7 +153,8 @@ func processInstruction(inst slimList, slimResults slimList, idx int) (stop bool
 	case "call":
 		returnString := "/__VOID__/"
 		instanceName := inst[2].String()
-		methodName := strings.Title(inst[3].String())
+		slimMethodName := inst[3].String()
+		goMethodName := strings.Title(slimMethodName)
 		instance, found := instances[instanceName]
 		numFields := len(inst)
 		var args slimList
@@ -159,21 +165,26 @@ func processInstruction(inst slimList, slimResults slimList, idx int) (stop bool
 		if !found {
 			slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:message:<<NO_INSTANCE %s>>", instanceName))
 		} else {
-			m := instance.MethodByName(methodName)
+			m := instance.MethodByName(goMethodName)
+			slimArgCount := len(args)
 			if !m.IsValid() {
-				slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:message:<<NO_METHOD_IN_CLASS %s %s>>", methodName, instance.Type()))
-			} else if m.Type().NumIn() != len(args) {
-				slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:message:<<%s expects exactly %d arguments, but received %d>>", methodName, m.Type().NumIn(), len(args)))
+				slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:message:<<NO_METHOD_IN_CLASS %s[%d] %s>>", slimMethodName, slimArgCount, instanceTypes[instanceName]))
+			} else if m.Type().NumIn() != slimArgCount {
+				slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:message:<<%s expects exactly %d arguments, but received %d>>", goMethodName, m.Type().NumIn(), slimArgCount))
 			} else {
-				//slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:TODO"))
 				convertedValues := convertArguments(m.Type(), args)
 				res := m.Call(convertedValues)
 				switch len(res) {
 				case 0:
 					// empty
 				case 1:
-					c := converters[res[0].Type()]
-					returnString = c.Out(res[0])
+					v := res[0]
+					if reflect.Ptr == v.Kind() && v.IsNil() {
+						returnString = "null"
+					} else {
+						c := converters[v.Type()]
+						returnString = c.Out(v)
+					}
 				default:
 					returnString = "__EXCEPTION__:multi-value return is not supported"
 				}
