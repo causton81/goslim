@@ -9,7 +9,6 @@ import (
 	"log"
 	"os"
 	"reflect"
-	"runtime/debug"
 	"strconv"
 	"strings"
 
@@ -110,7 +109,10 @@ runLoop:
 					break
 				}
 			}
-
+			log.Println("Slim Response:")
+			for _, item := range slimResults {
+				log.Println(item)
+			}
 			fmt.Fprintf(slimOut, "%s", slimResults.Slim())
 		}
 	}
@@ -126,10 +128,31 @@ func processInstruction(inst slimList, slimResults slimList, idx int) (stop bool
 		if nil != err {
 			typ := reflect.TypeOf(err)
 			if strings.Contains(typ.Name(), "StopTest") {
-				slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:ABORT_SLIM_TEST:%s", err))
+				message := ""
+				if str, ok := err.(fmt.Stringer); ok {
+					message = str.String()
+				}
+
+				if 0 < len(message) {
+					slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:ABORT_SLIM_TEST:message:<<%s>>", message))
+				} else {
+					slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:ABORT_SLIM_TEST:%s", err))
+				}
 				stop = true
 			} else {
-				slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:%s %s", err, debug.Stack()))
+				message := ""
+				switch s := err.(type) {
+				case string:
+					message = s
+				case fmt.Stringer:
+					message = s.String()
+				}
+
+				if 0 < len(message) {
+					slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:message:<<%s>>", message))
+				} else {
+					slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:%s", err))
+				}
 			}
 		}
 	}()
@@ -139,10 +162,24 @@ func processInstruction(inst slimList, slimResults slimList, idx int) (stop bool
 	case "make":
 		instanceName := inst[2].String()
 		className := inst[3].String()
+		var args slimList
+		if 4 < len(inst) {
+			args = inst[4:len(inst)]
+		}
+		numArgs := len(args)
+
 		typ, found := fixtureTypes[className]
 		if !found {
-			slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:message:<<COULD_NOT_INVOKE_CONSTRUCTOR %s>>", className))
+			//slimResults[idx] = asList(id, fmt.Sprintf("__EXCEPTION__:message:<<COULD_NOT_INVOKE_CONSTRUCTOR %s>>", className))
+			panic(fmt.Errorf("message:<<COULD_NOT_INVOKE_CONSTRUCTOR %s>>", className))
 		} else {
+			initMethod, hasInit := reflect.PtrTo(typ).MethodByName("Init")
+			//log.Printf("%s hasInit %v", typ.Name(), hasInit)
+			if hasInit {
+				if numArgs != initMethod.Type.NumIn() {
+					panic(fmt.Errorf("message:<<COULD_NOT_INVOKE_CONSTRUCTOR %s[%d]>>", className, numArgs))
+				}
+			}
 			instances[instanceName] = reflect.New(typ)
 			//TODO: maybe make this better
 			instanceTypes[instanceName] = className
@@ -182,8 +219,8 @@ func processInstruction(inst slimList, slimResults slimList, idx int) (stop bool
 					if reflect.Ptr == v.Kind() && v.IsNil() {
 						returnString = "null"
 					} else {
-						c := converters[v.Type()]
-						returnString = c.Out(v)
+						conv := getConverterForType(v.Type())
+						returnString = conv.Out(v)
 					}
 				default:
 					returnString = "__EXCEPTION__:multi-value return is not supported"
@@ -201,6 +238,7 @@ func processInstruction(inst slimList, slimResults slimList, idx int) (stop bool
 
 func init() {
 	RegisterConverter(stringConv{})
+	RegisterConverter(intConv{})
 	RegisterConverter(float64conv{})
 }
 

@@ -25,17 +25,21 @@ func (*TestSlim) ThrowNormal() string {
 	panic(fmt.Errorf("first"))
 }
 func (*TestSlim) ThrowStopping() string {
-	panic(StopTest{msg: "second"})
+	panic(StopTest{detail: "second"})
 }
 
 type StopTest struct {
-	msg string
+	detail  string
+	message string
+}
+
+func (st StopTest) String() string {
+	return st.message
 }
 
 func (st StopTest) Error() string {
-	return st.msg
+	return st.detail
 }
-
 
 func (*TestSlim) NullString() *string {
 	return nil
@@ -53,12 +57,44 @@ func (ts *TestSlim) GetStringArg() string {
 	return ts.s
 }
 
-type ExecuteThrowsReportableException struct {
+func (*TestSlim) ReturnInt() int {
+	return 7
+}
 
+func (*TestSlim) EchoString(msg string) string {
+	return msg
+}
+
+func (*TestSlim) ThrowStopTestExceptionWithMessage() {
+	panic(StopTest{message: "Stop Test"})
+}
+
+func (*TestSlim) ThrowExceptionWithMessage() {
+	panic("Test message")
+}
+
+type ExecuteThrowsReportableException struct {
 }
 
 func (*ExecuteThrowsReportableException) Execute() {
 	panic(fmt.Errorf("A Reportable Exception"))
+}
+
+type TableFixture struct {
+}
+
+func (*TableFixture) Init(arg string) {
+
+}
+
+type DummyDecisionTableWithExecuteButNoReset struct {
+}
+
+func (*DummyDecisionTableWithExecuteButNoReset) Execute() {
+
+}
+func (*DummyDecisionTableWithExecuteButNoReset) X() int {
+	return 1
 }
 
 func main() {
@@ -66,5 +102,7 @@ func main() {
 	slim.RegisterFixtureWithName(DummyDecisionTable{}, "fitnesse.slim.test.DummyDecisionTable")
 	slim.RegisterFixtureWithName(TestSlim{}, "fitnesse.slim.test.TestSlim")
 	slim.RegisterFixtureWithName(ExecuteThrowsReportableException{}, "fitnesse.slim.test.ExecuteThrowsReportableException")
+	slim.RegisterFixtureWithName(TableFixture{}, "TableFixture")
+	slim.RegisterFixtureWithName(DummyDecisionTableWithExecuteButNoReset{}, "fitnesse.slim.test.DummyDecisionTableWithExecuteButNoReset")
 	slim.ListenAndServe()
 }

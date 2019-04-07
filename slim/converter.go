@@ -2,6 +2,7 @@ package slim
 
 import (
 	"fmt"
+	"github.com/causton81/goslim/lib"
 	"log"
 	"reflect"
 	"strconv"
@@ -15,6 +16,36 @@ type Converter interface {
 }
 
 var converters = make(map[reflect.Type]Converter)
+
+type stringConv struct{}
+
+func (stringConv) Type() reflect.Type {
+	return reflect.TypeOf(string(""))
+}
+
+func (stringConv) In(s string) reflect.Value {
+	return reflect.ValueOf(s)
+}
+
+func (stringConv) Out(value reflect.Value) string {
+	return value.Interface().(string)
+}
+
+type intConv struct{}
+
+func (intConv) Type() reflect.Type {
+	return reflect.TypeOf(int(0))
+}
+
+func (intConv) In(s string) reflect.Value {
+	n, err := strconv.Atoi(s)
+	lib.Must(err)
+	return reflect.ValueOf(n)
+}
+
+func (intConv) Out(value reflect.Value) string {
+	return fmt.Sprintf("%d", value.Int())
+}
 
 type float64conv struct{}
 
@@ -44,23 +75,9 @@ func RegisterConverter(c Converter) {
 	converters[c.Type()] = c
 }
 
-type stringConv struct{}
-
-func (stringConv) Type() reflect.Type {
-	return reflect.TypeOf(string(""))
-}
-
-func (stringConv) In(s string) reflect.Value {
-	return reflect.ValueOf(s)
-}
-
-func (stringConv) Out(value reflect.Value) string {
-	return value.Interface().(string)
-}
-
-type Scoper interface {
-	GetPrefix() string
-}
+//type Scoper interface {
+//	GetPrefix() string
+//}
 
 var typePrefix = ""
 
@@ -73,15 +90,17 @@ func convertArguments(funcTyp reflect.Type, args slimList) []reflect.Value {
 	for i := 0; i < funcTyp.NumIn(); i++ {
 		argTyp := funcTyp.In(i)
 		log.Printf("arg typ %s", argTyp)
-		conv, found := converters[argTyp]
-		if !found {
-			//if argTyp.Implements(reflect.TypeOf((*Scoper)(nil))) {
-			//	typePrefix = reflect.New(argTyp).Interface().(Scoper).GetPrefix()
-			//}
-			panic(fmt.Errorf("message:<<NO_CONVERTER_FOR_ARGUMENT_NUMBER %s%s.>>", typePrefix, argTyp.Name()))
-		}
+		conv := getConverterForType(argTyp)
 		ret[i] = conv.In(args[i].(slimString).String())
 	}
 
 	return ret
+}
+
+func getConverterForType(argTyp reflect.Type) Converter {
+	conv, found := converters[argTyp]
+	if !found {
+		panic(fmt.Errorf("message:<<NO_CONVERTER_FOR_ARGUMENT_NUMBER %s%s.>>", typePrefix, argTyp.Name()))
+	}
+	return conv
 }
