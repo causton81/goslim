@@ -113,6 +113,7 @@ runLoop:
 			for _, item := range slimResults {
 				log.Println(item)
 			}
+			fmt.Fprintf(os.Stderr, "%s", slimResults.Slim())
 			fmt.Fprintf(slimOut, "%s", slimResults.Slim())
 		}
 	}
@@ -172,7 +173,7 @@ func processInstruction(inst slimList, slimResults slimList, idx int) (stop bool
 
 		typ, found := fixtureTypes[className]
 		if !found {
-			panic(fmt.Errorf("message:<<COULD_NOT_INVOKE_CONSTRUCTOR %s>>", className))
+			panic(fmt.Errorf("message:<<COULD_NOT_INVOKE_CONSTRUCTOR %s[%d]>>", className, numArgs))
 		} else {
 			initMethod, hasInit := reflect.PtrTo(typ).MethodByName("Init")
 			log.Printf("has init %v, args %v", hasInit, args)
@@ -190,7 +191,7 @@ func processInstruction(inst slimList, slimResults slimList, idx int) (stop bool
 
 	// [decisionTable_0_1 call decisionTable_0 table [[numerator denominator quotient?] [10 2 5.0] [12.6 3 4.2] [22 7 ~=3.14] [9 3 <5] [11 2 4<_<6] [100 4 33]]]
 	case "call", "callAndAssign":
-		returnString := "/__VOID__/"
+		var rval slimmer = slimString("/__VOID__/")
 		off := 0
 		symbolName := ""
 		if "callAndAssign" == op {
@@ -228,16 +229,25 @@ func processInstruction(inst slimList, slimResults slimList, idx int) (stop bool
 						symbols[symbolName] = v.Interface()
 					}
 					if reflect.Ptr == v.Kind() && v.IsNil() {
-						returnString = "null"
+						rval = slimString("null")
+					} else if reflect.Slice == v.Kind() {
+						elemType := v.Type().Elem()
+						conv := getConverterForType(elemType)
+						list := make(slimList, v.Len())
+						for i := 0; i < v.Len(); i++ {
+							list[i] = slimString(conv.Out(v.Index(i)))
+						}
+
+						rval = list
 					} else {
 						conv := getConverterForType(v.Type())
-						returnString = conv.Out(v)
+						rval = slimString(conv.Out(v))
 					}
 				default:
-					returnString = "__EXCEPTION__:multi-value return is not supported"
+					rval = slimString("__EXCEPTION__:multi-value return is not supported")
 				}
 
-				slimResults[idx] = asList(id, returnString)
+				slimResults[idx] = asList(id, rval)
 			}
 		}
 	//case "callAndAssign":
@@ -284,6 +294,10 @@ func asList(items ...interface{}) slimList {
 		switch e := e.(type) {
 		case string:
 			l = append(l, slimString(e))
+		case slimList:
+			l = append(l, e)
+		case slimString:
+			l = append(l, e)
 		}
 	}
 
@@ -377,7 +391,7 @@ func (ps *prefixedStream) write(in []byte) {
 		in = in[0 : len(in)-1]
 	}
 	newline := []byte("\n")
-	replacer := []byte("\nSOUT :")
+	replacer := []byte(ps.replacer)
 	sep := ' '
 	if '\n' != ps.lastByte {
 		sep = '.'

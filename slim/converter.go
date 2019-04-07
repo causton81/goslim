@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+
+// TODO consider splitting into two interfaces because returned slices will never call Out()
 type Converter interface {
 	Type() reflect.Type
 	In(s string) reflect.Value
@@ -91,13 +93,14 @@ func (sliceIntConv) In(s string) reflect.Value {
 }
 
 func (sliceIntConv) Out(value reflect.Value) string {
-	numbers := value.Interface().([]int)
-	strs := make([]string, len(numbers))
-	for i, elem := range numbers {
-		strs[i] = strconv.Itoa(elem)
-	}
-	return fmt.Sprintf("[%s]", strings.Join(strs, ", "))
-	//return fmt.Sprintf("%v", numbers)
+	//numbers := value.Interface().([]int)
+	//strs := make([]string, len(numbers))
+	//for i, elem := range numbers {
+	//	strs[i] = strconv.Itoa(elem)
+	//}
+	//return fmt.Sprintf("[%s]", strings.Join(strs, ", "))
+	////return fmt.Sprintf("%v", numbers)
+	panic("Out should not be called on returned slices")
 }
 
 func RegisterConverter(c Converter) {

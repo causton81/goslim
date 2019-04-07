@@ -121,6 +121,14 @@ func (*DecisionTableExecuteThrows) X() int {
 	return 1
 }
 
+type DummyQueryTableWithNoTableMethod struct {
+
+}
+
+func (*DummyQueryTableWithNoTableMethod) Query() []int {
+	return []int{}
+}
+
 func main() {
 	slim.SetTypePrefix("fitnesse.slim.test.TestSlim$")
 	slim.RegisterFixtureWithName(DummyDecisionTable{}, "fitnesse.slim.test.DummyDecisionTable")
@@ -129,5 +137,7 @@ func main() {
 	slim.RegisterFixtureWithName(TableFixture{}, "TableFixture")
 	slim.RegisterFixtureWithName(DummyDecisionTableWithExecuteButNoReset{}, "fitnesse.slim.test.DummyDecisionTableWithExecuteButNoReset")
 	slim.RegisterFixtureWithName(DecisionTableExecuteThrows{}, "fitnesse.slim.test.DecisionTableExecuteThrows")
+	slim.RegisterFixtureWithName(DummyQueryTableWithNoTableMethod{}, "fitnesse.slim.test.DummyQueryTableWithNoTableMethod")
+
 	slim.ListenAndServe()
 }
