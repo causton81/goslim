@@ -9,7 +9,10 @@ import (
 	"strings"
 )
 
-
+// I tried implementing this with user-defined basic types (`type stringConv string`) instead of empty structs, but I
+// could not figure out how to get the underlying type when reflecting (reflection returns the user-defined type which
+// I don't want to force users to use). The current implementation with a Type() method is the best way I know to find
+// the right converter.
 // TODO consider splitting into two interfaces because returned slices will never call Out()
 type Converter interface {
 	Type() reflect.Type
