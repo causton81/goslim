@@ -5,6 +5,7 @@ import (
 	"github.com/causton81/goslim/lib"
 	"log"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -120,13 +121,37 @@ func SetTypePrefix(p string) {
 	typePrefix = p
 }
 
+var symbolExpr = regexp.MustCompile(`\$([[:alpha:]]+)`)
+
 func convertArguments(funcTyp reflect.Type, args slimList) []reflect.Value {
 	ret := make([]reflect.Value, funcTyp.NumIn())
 	for i := 0; i < funcTyp.NumIn(); i++ {
+		argString := args[i].(slimString).String()
 		argTyp := funcTyp.In(i)
-		log.Printf("arg typ %s", argTyp)
+		log.Printf("arg typ %s: %s", argTyp, argString)
 		conv := getConverterForType(argTyp)
-		ret[i] = conv.In(args[i].(slimString).String())
+		symMatch := symbolExpr.FindAllStringSubmatch(argString, -1)
+		log.Printf("sym match: '%s'", symMatch)
+		anyMatches := 0 < len(symMatch)
+		if anyMatches {
+			wholeArgIsSymbol := symMatch[0][0] == argString
+			if wholeArgIsSymbol {
+				symVal := symbols[symMatch[0][1]]
+				if reflect.TypeOf(symVal).AssignableTo(argTyp) {
+					ret[i] = reflect.ValueOf(symVal)
+					continue
+				}
+			} else {
+				for _, m := range symMatch {
+					symVal := symbols[m[1]]
+					log.Printf("sym %s = '%s'", m[0], symVal)
+
+					symString := fmt.Sprintf("%s", symVal)
+					argString = strings.ReplaceAll(argString, m[0], symString)
+				}
+			}
+		}
+		ret[i] = conv.In(argString)
 	}
 
 	return ret

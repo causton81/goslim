@@ -11,8 +11,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-
-	"golang.org/x/sys/unix"
 )
 
 var slimIn *os.File
@@ -31,37 +29,8 @@ func redirectStdoutAndStderr() {
 	psOut := newPrefixedStream(realStderr, "SOUT")
 	psErr := newPrefixedStream(realStderr, "SERR")
 
-	go func() {
-		buf := make([]byte, 4096)
-
-		for {
-			fds := []unix.PollFd{
-				{Fd: int32(stdoutReadSide.Fd()), Events: unix.POLLIN},
-				{Fd: int32(stderrReadSide.Fd()), Events: unix.POLLIN},
-			}
-			n, err := unix.Poll(fds, 100)
-			if err != nil {
-				panic(err)
-			} else if 0 < n {
-				if 0 < unix.POLLIN&fds[0].Revents {
-					numRead, err := stdoutReadSide.Read(buf)
-					lib.Must(err)
-					data := buf[0:numRead]
-					psOut.write(data)
-					//final := bytes.ReplaceAll(data, newline, stdoutStart)
-					//realStderr.Write(final)
-				}
-				if 0 < unix.POLLIN&fds[1].Revents {
-					numRead, err := stderrReadSide.Read(buf)
-					lib.Must(err)
-					data := buf[0:numRead]
-					psErr.write(data)
-					//final := bytes.ReplaceAll(data, newline, stdoutStart)
-					//realStderr.Write(final)
-				}
-			}
-		}
-	}()
+	go psOut.processSource(stdoutReadSide)
+	go psErr.processSource(stderrReadSide)
 
 	os.Stdout = stdoutWriteSide
 	os.Stderr = stderrWriteSide
@@ -401,4 +370,13 @@ func (ps *prefixedStream) write(in []byte) {
 	ps.outStream.Write(newline)
 
 	ps.lastByte = trailingByte
+}
+
+func (ps *prefixedStream) processSource(src *os.File) {
+	buf := make([]byte, 4096)
+	for {
+		n, err := src.Read(buf)
+		lib.Must(err)
+		ps.write(buf[:n])
+	}
 }
