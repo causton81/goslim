@@ -3,11 +3,11 @@ An implementation of the Fitnesse Slim protocol in Go. This project is a plugin 
 
 ## Requirements when launching FitNesse
 ```bash
-# Ensure that `go version` works
+# Ensure that `go env` works
 export PATH=/path/to/golang-sdk/bin:$PATH
 
 # Ensure that binaries installed with `go install` are on your path
-export PATH=$GOPATH/bin:$PATH
+export PATH=$(go env GOPATH)/bin:$PATH
 ```
 
 Install `goslim` helper (see next section)
